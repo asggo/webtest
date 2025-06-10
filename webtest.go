@@ -121,6 +121,11 @@ func (c *case_) runHandlerE2E(client *http.Client, baseURL string) error {
 		return err
 	}
 
+	for _, cookie := range client.Jar.Cookies {
+		fmt.Printf("COOKIE: %+v", cookie)
+		req.AddCookie(cookie)
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
