@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
-	"testing"
 )
 
 // CheckHandlerE2E is like CheckHandler, but the handler is served by a test
@@ -121,7 +118,7 @@ func (c *case_) runHandlerE2E(client *http.Client, baseURL string) error {
 		return err
 	}
 
-	for _, cookie := range client.Jar.Cookies {
+	for _, cookie := range client.Jar.Cookies(req.URL) {
 		fmt.Printf("COOKIE: %+v", cookie)
 		req.AddCookie(cookie)
 	}
