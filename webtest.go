@@ -14,16 +14,40 @@ import (
 	"strings"
 )
 
+type jar struct {
+	cookies []*http.Cookie
+}
+
+func (j jar) SetCookies(url *url.URL, cookies []*http.Cookie) {
+	for _, cookie := range cookies {
+		j.cookies = append(j.cookies, cookie)
+	}
+}
+
+func (j jar) Cookies(u *url.URL) []*http.Cookie {
+	return j.cookies
+}
+
+func NewJar() jar {
+	return jar{}
+}
+
+func NewHttpClient() *http.Client {
+	// Setup an HTTP client with a cookie jar.
+	return &http.Client{
+		Jar: NewJar(),
+	}
+}
+
 // CheckHandlerE2E is like CheckHandler, but the handler is served by a test
 // server and the request is executed by an HTTP client. If client is nil,
 // http.DefaultClient is used.
-func CheckHandlerE2E(fsys fs.FS, glob string, h http.Handler, client *http.Client) error {
+func CheckHandlerE2E(fsys fs.FS, glob string, h http.Handler) error {
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := NewHttpClient()
+
 	return check(fsys, glob, func(c *case_) error { return c.runHandlerE2E(client, srv.URL) })
 }
 
