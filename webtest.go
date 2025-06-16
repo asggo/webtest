@@ -1,3 +1,8 @@
+
+// Copyright 2021 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package webtest
 
 import (
@@ -39,54 +44,43 @@ func NewHttpClient() *http.Client {
 	}
 }
 
-// CheckHandlerE2E is like CheckHandler, but the handler is served by a test
-// server and the request is executed by an HTTP client. If client is nil,
-// http.DefaultClient is used.
-func CheckHandlerE2E(fsys fs.FS, glob string, h http.Handler) error {
-	srv := httptest.NewServer(h)
-	defer srv.Close()
-
-	client := NewHttpClient()
-
-	return check(fsys, glob, func(c *case_) error { return c.runHandlerE2E(client, srv.URL) })
+// TestHandler runs the test script files matched by glob
+// against the handler h.
+func TestHandler(t *testing.T, glob string, cli *http.Client, h http.Handler) {
+	t.Helper()
+	test(t, glob, func(c *case_) error { return c.runHandler(cli, h) })
 }
 
-func check(fsys fs.FS, glob string, do func(*case_) error) error {
-	files, err := fs.Glob(fsys, glob)
+func test(t *testing.T, glob string, do func(*case_) error) {
+	t.Helper()
+	files, err := filepath.Glob(glob)
 	if err != nil {
-		return err
+		t.Fatal(err)
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("no files match %#q", glob)
+		t.Fatalf("no files match %#q", glob)
 	}
-	var buf bytes.Buffer
 	for _, file := range files {
-		data, err := fs.ReadFile(fsys, file)
-		if err != nil {
-			fmt.Fprintf(&buf, "# %s\n%v\n", file, err)
-			continue
-		}
-		script, err := parseScript(file, string(data))
-		if err != nil {
-			fmt.Fprintf(&buf, "# %s\n%v\n", file, err)
-			continue
-		}
-		hdr := false
-		for _, c := range script.cases {
-			if err := do(c); err != nil {
-				if !hdr {
-					fmt.Fprintf(&buf, "# %s\n", file)
-					hdr = true
-				}
-				fmt.Fprintf(&buf, "## %s %s\n", c.method, c.url)
-				fmt.Fprintf(&buf, "%v\n", err)
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			t.Helper()
+			data, err := ioutil.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
 			}
-		}
+			script, err := parseScript(file, string(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range script.cases {
+				t.Run(c.method+"/"+strings.TrimPrefix(c.url, "/"), func(t *testing.T) {
+					t.Helper()
+					if err := do(c); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
+		})
 	}
-	if buf.Len() > 0 {
-		return errors.New(buf.String())
-	}
-	return nil
 }
 
 // A script is a parsed test script.
@@ -111,52 +105,29 @@ type case_ struct {
 
 // A cmp is a single comparison (check) made against a test case.
 type cmpCheck struct {
-	file     string
-	line     int
-	what     string
-	whatArg  string
-	op       string
-	want     string
-	wantRE   *regexp.Regexp
-	wantJSON string // after unmarshal+re-marshal, so it is standardized
+	file    string
+	line    int
+	what    string
+	whatArg string
+	op      string
+	want    string
+	wantRE  *regexp.Regexp
 }
 
-// runHandlerE2E runs a test case against the test server's base URL using
-// the provided HTTP client.
-func (c *case_) runHandlerE2E(client *http.Client, baseURL string) error {
-	baseu, err := url.Parse(baseURL)
-	if err != nil {
-		return err
-	}
-	// the case url may have a scheme and host, if so we have to replace it
-	// with the test server's.
-	caseu, err := url.Parse(c.url)
-	if err != nil {
-		return err
-	}
-	caseu.Host = baseu.Host
-	caseu.Scheme = baseu.Scheme
-
-	req, err := c.newRequest(caseu.String())
+// runHandler runs a test case against the handler h.
+func (c *case_) runHandler(cli *http.Client, h http.Handler) error {
+	w := httptest.NewRecorder()
+	r, err := c.newRequest(c.url)
 	if err != nil {
 		return err
 	}
 
-	for _, cookie := range client.Jar.Cookies(nil) {
-		req.AddCookie(cookie)
+	for _, cookie := range cli.Jar.Cookies(nil) {
+		r.AddCookie(cookie)
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	return c.check(resp, string(body))
+	h.ServeHTTP(w, r)
+	return c.check(w.Result(), w.Body.String())
 }
 
 // newRequest creates a new request for the case c,
@@ -254,26 +225,6 @@ func (c *case_) check(resp *http.Response, body string) error {
 		case "!contains":
 			if strings.Contains(value, chk.want) {
 				fmt.Fprintf(&msg, "%s:%d: %s contains %#q (but should not)\n\t%s\n", chk.file, chk.line, what, chk.want, indent(value))
-			}
-		case "json", "!json":
-			var v any
-			if err := json.Unmarshal([]byte(value), &v); err != nil {
-				fmt.Fprintf(&msg, "%s:%d: invalid JSON value: %s\n\t%s\n", chk.file, chk.line, err, value)
-			}
-			b, err := json.Marshal(v)
-			if err != nil {
-				fmt.Fprintf(&msg, "%s:%d: invalid JSON value: %s\n\t%s\n", chk.file, chk.line, err, value)
-			}
-			gotJSON := string(b)
-
-			if chk.op == "json" {
-				if gotJSON != chk.wantJSON {
-					fmt.Fprintf(&msg, "%s:%d: %s json:\n\t%s\ndoes not match (but should):\n\t%s\n", chk.file, chk.line, what, value, chk.wantJSON)
-				}
-			} else {
-				if gotJSON == chk.wantJSON {
-					fmt.Fprintf(&msg, "%s:%d: %s json:\n\t%s\nmatches (but should not):\n\t%s\n", chk.file, chk.line, what, value, chk.wantJSON)
-				}
 			}
 		}
 	}
@@ -436,7 +387,7 @@ func parseScript(file, text string) (*script, error) {
 		// Opcode, with optional leading "not"
 		chk.op, args = splitOneField(args)
 		switch chk.op {
-		case "==", "!=", "~", "!~", "contains", "!contains", "json", "!json":
+		case "==", "!=", "~", "!~", "contains", "!contains":
 			// ok
 		default:
 			return nil, errorf("unknown check operator %q", chk.op)
@@ -490,20 +441,6 @@ func parseScript(file, text string) (*script, error) {
 					return nil, errorf("invalid regexp: %s", err)
 				}
 				chk.wantRE = re
-			} else if chk.op == "json" || chk.op == "!json" {
-				var v any
-				if err := json.Unmarshal([]byte(chk.want), &v); err != nil {
-					lineno = chk.line
-					line = chk.want
-					return nil, errorf("invalid json: %s", err)
-				}
-				b, err := json.Marshal(v)
-				if err != nil {
-					lineno = chk.line
-					line = chk.want
-					return nil, errorf("invalid json: %s", err)
-				}
-				chk.wantJSON = string(b)
 			}
 		}
 		if !sawCode {
