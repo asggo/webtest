@@ -45,9 +45,10 @@ func NewHttpClient() *http.Client {
 
 // TestHandler runs the test script files matched by glob
 // against the handler h.
-func TestHandler(t *testing.T, glob string, cli *http.Client, h http.Handler) {
+func TestHandler(t *testing.T, glob string, h http.Handler) {
 	t.Helper()
-	test(t, glob, func(c *case_) error { return c.runHandler(cli, h) })
+	client := NewHttpClient()
+	test(t, glob, func(c *case_) error { return c.runHandler(client, h) })
 }
 
 func test(t *testing.T, glob string, do func(*case_) error) {
