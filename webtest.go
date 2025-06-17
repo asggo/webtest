@@ -19,25 +19,35 @@ import (
 	"testing"
 )
 
+// newTester creates a new server and client for testing the given handler.
+func newTester(t *testing.T, h http.Handler) (*httptest.Server, *http.Client, *url.URL) {
+	server := httptest.NewTLSServer(h)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal("could not newTester:", err)
+	}
+
+	client := server.Client()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	client.Jar = jar
+
+	url, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal("could not newTester:", err)
+	}
+
+	return server, client, url
+}
+
 // TestHandler runs the test script files matched by glob
 // against the handler h.
 func TestHandler(t *testing.T, glob string, h http.Handler) {
 	t.Helper()
-	ts := httptest.NewTLSServer(h)
-	defer ts.Close()
-
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal("could not TestHandler:", err)
-	}
-
-	client := ts.Client()
-	client.Jar = jar
-
-	url, err := url.Parse(ts.URL)
-	if err != nil {
-		t.Fatal("could not TestHandler:", err)
-	}
+	server, client, url := newTester(t, h)
+	defer server.Close()
 
 	test(t, glob, func(c *case_) error { return c.runHandler(url, client, h) })
 }
@@ -114,11 +124,8 @@ func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) e
 	}
 
 	for _, cookie := range client.Jar.Cookies(base) {
-		fmt.Printf("Found cookie: %+v", cookie)
 		r.AddCookie(cookie)
 	}
-
-	fmt.Printf("%+v\n", r)
 
 	res, err := client.Do(r)
 	if err != nil {
