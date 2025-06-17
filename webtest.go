@@ -34,7 +34,12 @@ func TestHandler(t *testing.T, glob string, h http.Handler) {
 	client := ts.Client()
 	client.Jar = jar
 
-	test(t, glob, func(c *case_) error { return c.runHandler(ts.URL, client, h) })
+	url, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal("could not TestHandler:", err)
+	}
+
+	test(t, glob, func(c *case_) error { return c.runHandler(url, client, h) })
 }
 
 func test(t *testing.T, glob string, do func(*case_) error) {
@@ -101,19 +106,19 @@ type cmpCheck struct {
 }
 
 // runHandler runs a test case against the handler h.
-func (c *case_) runHandler(base string, client *http.Client, h http.Handler) error {
+func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) error {
 	url := fmt.Sprintf("%s%s", base, c.url)
 	r, err := c.newRequest(url)
 	if err != nil {
 		return err
 	}
 
-	// for _, cookie := range cli.Jar.Cookies(nil) {
-	// 	fmt.Printf("Found cookie: %+v", cookie)
-	// 	r.AddCookie(cookie)
-	// }
+	for _, cookie := range client.Jar.Cookies(base) {
+		fmt.Printf("Found cookie: %+v", cookie)
+		r.AddCookie(cookie)
+	}
 
-	// fmt.Printf("%+v", r)
+	fmt.Printf("%+v", r)
 
 	res, err := client.Do(r)
 	if err != nil {
