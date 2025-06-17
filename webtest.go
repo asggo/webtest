@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
@@ -18,31 +19,6 @@ import (
 	"testing"
 )
 
-type jar struct {
-	cookies []*http.Cookie
-}
-
-func (j jar) SetCookies(url *url.URL, cookies []*http.Cookie) {
-	for _, cookie := range cookies {
-		j.cookies = append(j.cookies, cookie)
-	}
-}
-
-func (j jar) Cookies(u *url.URL) []*http.Cookie {
-	return j.cookies
-}
-
-func NewJar() jar {
-	return jar{}
-}
-
-func NewHttpClient() *http.Client {
-	// Setup an HTTP client with a cookie jar.
-	return &http.Client{
-		Jar: NewJar(),
-	}
-}
-
 // TestHandler runs the test script files matched by glob
 // against the handler h.
 func TestHandler(t *testing.T, glob string, h http.Handler) {
@@ -50,8 +26,13 @@ func TestHandler(t *testing.T, glob string, h http.Handler) {
 	ts := httptest.NewTLSServer(h)
 	defer ts.Close()
 
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal("could not TestHandler:", err)
+	}
+
 	client := ts.Client()
-	client.Jar = NewJar()
+	client.Jar = jar
 
 	test(t, glob, func(c *case_) error { return c.runHandler(ts.URL, client, h) })
 }
