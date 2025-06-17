@@ -123,8 +123,11 @@ func (c *case_) runHandler(cli *http.Client, h http.Handler) error {
 	}
 
 	for _, cookie := range cli.Jar.Cookies(nil) {
+		fmt.Println("Found cookie: %+v", cookie)
 		r.AddCookie(cookie)
 	}
+
+	fmt.Println("%+v", r)
 
 	h.ServeHTTP(w, r)
 	return c.check(w.Result(), w.Body.String())
