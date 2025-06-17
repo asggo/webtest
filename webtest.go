@@ -118,7 +118,7 @@ func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) e
 		r.AddCookie(cookie)
 	}
 
-	fmt.Printf("%+v", r)
+	fmt.Printf("%+v\n", r)
 
 	res, err := client.Do(r)
 	if err != nil {
@@ -130,6 +130,8 @@ func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) e
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("%+v\n", res.Header)
 
 	return c.check(res, string(body))
 }
