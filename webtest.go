@@ -47,7 +47,12 @@ func NewHttpClient() *http.Client {
 // against the handler h.
 func TestHandler(t *testing.T, glob string, h http.Handler) {
 	t.Helper()
-	client := NewHttpClient()
+	ts := httptest.NewTLSServer(h)
+	defer ts.Close()
+
+	client := ts.Client()
+	client.Jar = NewJar()
+
 	test(t, glob, func(c *case_) error { return c.runHandler(client, h) })
 }
 
@@ -115,22 +120,31 @@ type cmpCheck struct {
 }
 
 // runHandler runs a test case against the handler h.
-func (c *case_) runHandler(cli *http.Client, h http.Handler) error {
-	w := httptest.NewRecorder()
+func (c *case_) runHandler(client *http.Client, h http.Handler) error {
 	r, err := c.newRequest(c.url)
 	if err != nil {
 		return err
 	}
 
-	for _, cookie := range cli.Jar.Cookies(nil) {
-		fmt.Println("Found cookie: %+v", cookie)
-		r.AddCookie(cookie)
+	// for _, cookie := range cli.Jar.Cookies(nil) {
+	// 	fmt.Printf("Found cookie: %+v", cookie)
+	// 	r.AddCookie(cookie)
+	// }
+
+	// fmt.Printf("%+v", r)
+
+	res, err := client.Do(r)
+	if err != nil {
+		return err
 	}
 
-	fmt.Println("%+v", r)
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return err
+	}
 
-	h.ServeHTTP(w, r)
-	return c.check(w.Result(), w.Body.String())
+	return c.check(res, string(body))
 }
 
 // newRequest creates a new request for the case c,
