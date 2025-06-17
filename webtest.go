@@ -53,7 +53,7 @@ func TestHandler(t *testing.T, glob string, h http.Handler) {
 	client := ts.Client()
 	client.Jar = NewJar()
 
-	test(t, glob, func(c *case_) error { return c.runHandler(client, h) })
+	test(t, glob, func(c *case_) error { return c.runHandler(ts.URL, client, h) })
 }
 
 func test(t *testing.T, glob string, do func(*case_) error) {
@@ -120,8 +120,9 @@ type cmpCheck struct {
 }
 
 // runHandler runs a test case against the handler h.
-func (c *case_) runHandler(client *http.Client, h http.Handler) error {
-	r, err := c.newRequest(c.url)
+func (c *case_) runHandler(base string, client *http.Client, h http.Handler) error {
+	url := fmt.Sprintf("%s%s", base, c.url)
+	r, err := c.newRequest(url)
 	if err != nil {
 		return err
 	}
