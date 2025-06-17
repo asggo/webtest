@@ -1,6 +1,7 @@
-// Copyright 2021 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// This package is a modified version of the webtest package available at
+// https://github.com/cespare/webtest, and is under the same license as the
+// original package. This version has a reusable http.Client that allows the
+// tested handler to set and remove secure cookies as needed.
 
 package webtest
 
@@ -19,13 +20,13 @@ import (
 	"testing"
 )
 
-// newTester creates a new server and client for testing the given handler.
-func newTester(t *testing.T, h http.Handler) (*httptest.Server, *http.Client, *url.URL) {
+// newHttpTester creates a server and client for testing the given handler.
+func newHttpTester(t *testing.T, h http.Handler) (*httptest.Server, *http.Client, *url.URL) {
 	server := httptest.NewTLSServer(h)
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		t.Fatal("could not newTester:", err)
+		t.Fatal("could not newHttpTester:", err)
 	}
 
 	client := server.Client()
@@ -36,17 +37,17 @@ func newTester(t *testing.T, h http.Handler) (*httptest.Server, *http.Client, *u
 
 	url, err := url.Parse(server.URL)
 	if err != nil {
-		t.Fatal("could not newTester:", err)
+		t.Fatal("could not newHttpTester:", err)
 	}
 
 	return server, client, url
 }
 
-// TestHandler runs the test script files matched by glob
-// against the handler h.
+// TestHandler runs the test script files matched by glob against the
+// handler h.
 func TestHandler(t *testing.T, glob string, h http.Handler) {
 	t.Helper()
-	server, client, url := newTester(t, h)
+	server, client, url := newHttpTester(t, h)
 	defer server.Close()
 
 	test(t, glob, func(c *case_) error { return c.runHandler(url, client, h) })
@@ -56,10 +57,10 @@ func test(t *testing.T, glob string, do func(*case_) error) {
 	t.Helper()
 	files, err := filepath.Glob(glob)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("could not test:", err)
 	}
 	if len(files) == 0 {
-		t.Fatalf("no files match %#q", glob)
+		t.Fatalf("could not test: no files match %#q", glob)
 	}
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {
@@ -137,8 +138,6 @@ func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) e
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("%+v\n", res.Header)
 
 	return c.check(res, string(body))
 }
