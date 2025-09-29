@@ -1,8 +1,3 @@
-// This package is a modified version of the webtest package available at
-// https://github.com/cespare/webtest, and is under the same license as the
-// original package. This version has a reusable http.Client that allows the
-// tested handler to set and remove secure cookies as needed.
-
 package webtest
 
 import (
@@ -15,31 +10,80 @@ import (
 	"strings"
 )
 
-// A case_ is a single test case (GET/HEAD/POST/PUT/PATCH/DELETE) in a script.
-type case_ struct {
-	file      string
-	line      int
-	method    string
-	url       string
-	headers   [][2]string
-	cookies   [][2]string
-	postbody  string
-	postquery string
-	posttype  string
-	hint      string
-	checks    []*cmpCheck
+type testLine struct {
+	line int
+	cmd  string
+	data string
 }
 
-// A cmp is a single comparison (check) made against a test case.
-type cmpCheck struct {
-	file    string
-	line    int
-	what    string
-	whatArg string
-	op      string
-	want    string
-	wantRE  *regexp.Regexp
+// A testCase is a single test case (GET/HEAD/POST/PUT/PATCH/DELETE) in a script.
+type testCase struct {
+	lineNum   int
+	method    string
+	url       string
+	modifiers []*modifier
+	checks    []*check
+	extracts  []*extract
 }
+
+func (t *testCase) load(data string) error {
+	var data      strings.Builder
+	var testLines []testLine
+
+	scan := bufio.NewReader(data)
+	ln := t.lineNum
+
+	// Parse each line in our test case. Lines that begin with a `\t` are part
+	// of the data for the most recently parsed line.
+	for {
+		line, err := scan.ReadString("\n")
+		if err != nil {
+			return fmt.Errorf("could not test.load: unexpected error %v at line %d", err, t.lineNum)
+		}
+
+		ln = ln + 1
+
+		switch {
+		case strings.HasPrefix(line, "\t"):
+			if len(testLines) == 0 {
+				return fmt.Errorf("could not test.load: unexpected \\t at line %d", ln)
+			}
+
+			testLines[len(testLines)-1].value += strings.TrimPrefix(line, "\t")
+		default:
+			cmd := string.Fields(line)[0]
+			data := strings.TrimPrefix(line, cmd)
+			testLines = append(testLines, testLine{line: ln, cmd: cmd, data: data})
+		}
+	}
+
+	// Process our parsed lines to build a test case.
+	for tl := range testLines {
+		switch tl.cmd {
+		case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE":
+			t.method = tl.cmd
+			t.url = tl.data
+			t.lineNum = tl.line
+		case "reqheader", "reqcookie", "posttype", "postbody":
+			m, err = newModifier(tl.cmd, tl.data)
+			if err != nil {
+				return fmt.Errorf("could not test.load: %v", err)
+			}
+
+			t.modifiers = append(t.modifiers, m)
+		case "extheader", "extcookie", "extbody":
+			e, err = newExtractor(tl.cmd, tl.data)
+			if err != nil {
+				return fmt.Errorf("could not test.load: %v", err)
+			}
+		}
+	}
+}
+
+func newTest(lineNum int) test {
+	return test{lineNum: lineNum}
+}
+
 
 // runHandler runs a test case against the handler h.
 func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) error {

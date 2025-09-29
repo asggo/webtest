@@ -1,8 +1,3 @@
-// This package is a modified version of the webtest package available at
-// https://github.com/cespare/webtest, and is under the same license as the
-// original package. This version has a reusable http.Client that allows the
-// tested handler to set and remove secure cookies as needed.
-
 package webtest
 
 import (
@@ -53,12 +48,18 @@ func TestHandler(t *testing.T, glob string, h http.Handler) {
 	}
 
 	for _, file := range files {
-		script, err := newScript(file)
+		data, err := os.Open(file)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		for _, c := range script.cases {
+		script := newScript(file)
+		err := script.load(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, c := range script.tests {
 			err := c.runHandler(url, client, h)
 			if err != nil {
 				t.Fatal("expected no error, received", err)
