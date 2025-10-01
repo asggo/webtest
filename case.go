@@ -10,87 +10,58 @@ import (
 	"strings"
 )
 
-type testLine struct {
+// A directive is a single action in a testCase.
+type directive struct {
 	line int
 	cmd  string
 	data string
 }
 
-// A testCase is a single test case (GET/HEAD/POST/PUT/PATCH/DELETE) in a script.
+// A testCase is a single test case in a script.
 type testCase struct {
-	lineNum   int
-	method    string
-	url       string
-	modifiers []*modifier
-	checks    []*check
-	extracts  []*extract
+	lineNum     int
+	method      string
+	url         url.URL
+	modifiers   []*modifier
+	comparisons []*comparison
+	extracts    []*extract
 }
 
-func (t *testCase) load(data string) error {
-	var data      strings.Builder
-	var testLines []testLine
-
-	scan := bufio.NewReader(data)
-	ln := t.lineNum
-
-	// Parse each line in our test case. Lines that begin with a `\t` are part
-	// of the data for the most recently parsed line.
-	for {
-		line, err := scan.ReadString("\n")
-		if err != nil {
-			return fmt.Errorf("could not test.load: unexpected error %v at line %d", err, t.lineNum)
-		}
-
-		ln = ln + 1
-
-		switch {
-		case strings.HasPrefix(line, "\t"):
-			if len(testLines) == 0 {
-				return fmt.Errorf("could not test.load: unexpected \\t at line %d", ln)
-			}
-
-			testLines[len(testLines)-1].value += strings.TrimPrefix(line, "\t")
-		default:
-			cmd := string.Fields(line)[0]
-			data := strings.TrimPrefix(line, cmd)
-			testLines = append(testLines, testLine{line: ln, cmd: cmd, data: data})
-		}
+func (t *testCase) addModifier(cmd, data string) error {
+	m, err = newModifier(cmd, data)
+	if err != nil {
+		return fmt.Errorf("could not test.addModifier: %v", err)
 	}
 
-	// Process our parsed lines to build a test case.
-	for tl := range testLines {
-		switch tl.cmd {
-		case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE":
-			t.method = tl.cmd
-			t.url = tl.data
-			t.lineNum = tl.line
-		case "reqheader", "reqcookie", "posttype", "postbody":
-			m, err = newModifier(tl.cmd, tl.data)
-			if err != nil {
-				return fmt.Errorf("could not test.load: %v", err)
-			}
+	t.modifiers = append(t.modifiers, m)
+}
 
-			t.modifiers = append(t.modifiers, m)
-		case "extheader", "extcookie", "extbody":
-			e, err = newExtractor(tl.cmd, tl.data)
-			if err != nil {
-				return fmt.Errorf("could not test.load: %v", err)
-			}
-		}
+func (t *testCase) addComparison(cmd, data string) error {
+	c, err = newComparison(cmd, data)
+	if err != nil {
+		return fmt.Errorf("could not test.addComparison: %v", err)
 	}
+
+	t.comparisons = append(t.comparisons, m)
 }
 
-func newTest(lineNum int) test {
-	return test{lineNum: lineNum}
-}
+func (t *testCase) addExtractor(cmd, data string) error {
+	e, err = newExtractor(cmd, data)
+	if err != nil {
+		return fmt.Errorf("could not test.addExtractor: %v", err)
+	}
 
+	t.modifiers = append(t.modifiers, m)
+}
 
 // runHandler runs a test case against the handler h.
-func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) error {
-	url := fmt.Sprintf("%s%s", base, c.url)
-	r, err := c.newRequest(url)
+func (t *testCase) runHandler(base *url.URL, client *http.Client, h http.Handler) ([]extracted, error) {
+	var exts []extracted
+
+	url := fmt.Sprintf("%s%s", base, t.url)
+	r, err := t.newRequest(url)
 	if err != nil {
-		return err
+		return exts, err
 	}
 
 	for _, cookie := range client.Jar.Cookies(base) {
@@ -99,41 +70,60 @@ func (c *case_) runHandler(base *url.URL, client *http.Client, h http.Handler) e
 
 	res, err := client.Do(r)
 	if err != nil {
-		return err
+		return exts, err
 	}
 
 	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
-		return err
+		return exts, err
 	}
 
-	return c.check(res, string(body))
+	for _, ext := range t.extractors {
+		e := ext.extract(res, string(body))
+		exts = append(exts, e)
+	}
+
+	for _, cmp := range t.comparisons {
+		err := cmp.compare()
+		if err != nil {
+			return exts, fmt.Errorf("could not t.runHandler: line %d: %v", t.lineNum, err)
+		}
+	}
+
+	return exts, nil
 }
 
 // newRequest creates a new request for the case c,
 // using the URL u.
-func (c *case_) newRequest(u string) (*http.Request, error) {
+func (t *testCase) newRequest(u string) (*http.Request, error) {
 	body := c.requestBody()
 	r, err := http.NewRequest(c.method, u, body)
 	if err != nil {
 		return nil, err
 	}
-	typ := c.posttype
-	if body != nil && typ == "" {
-		typ = "application/x-www-form-urlencoded"
+
+	for _, mod := range t.modifiers {
+		mod.modify(r)
 	}
-	if typ != "" {
-		r.Header.Set("Content-Type", typ)
-	}
-	for _, kv := range c.headers {
-		r.Header.Set(kv[0], kv[1])
-	}
-	for _, kv := range c.cookies {
-		r.AddCookie(&http.Cookie{Name: kv[0], Value: kv[1]})
-	}
+
 	return r, nil
 }
+
+func newTestCase(lineNum int, method, data string) (testCase, error) {
+	fields := string.Fields(data)
+
+	if len(fields) != 1 {
+		return nil, fmt.Errorf("could not newTestCase: expected `method url`")
+	}
+
+	return test{lineNum: lineNum, method: method, url: url}
+}
+
+
+
+
+
 
 // requestBody returns the body for the case's request.
 func (c *case_) requestBody() io.Reader {

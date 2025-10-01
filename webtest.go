@@ -40,30 +40,24 @@ func TestHandler(t *testing.T, glob string, h http.Handler) {
 
 	files, err := filepath.Glob(glob)
 	if err != nil {
-		t.Fatal("could not test:", err)
+		t.Fatalf("could not TestHandler: %v", err)
 	}
 
 	if len(files) == 0 {
-		t.Fatalf("could not test: no files match %#q", glob)
+		t.Fatalf("could not TestHandler: no files match %v", glob)
 	}
 
 	for _, file := range files {
 		data, err := os.Open(file)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("could not TestHandler: %v", err)
 		}
 
 		script := newScript(file)
 		err := script.load(data)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("could not TestHandler: %v", err)
 		}
 
-		for _, c := range script.tests {
-			err := c.runHandler(url, client, h)
-			if err != nil {
-				t.Fatal("expected no error, received", err)
-			}
-		}
-	}
+		script.run(t, url, client, h)
 }

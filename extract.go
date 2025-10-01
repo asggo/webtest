@@ -33,13 +33,13 @@ type extractor struct {
 // newExtractor attempts to build a valid extractor based on the given data
 // and value parameters. An error is returned if a valid extractor cannot be
 // created.
-func newExtractor(cmd, data string) (*extractor, error) {
+func newExtractor(from, data string) (*extractor, error) {
 	fields = strings.Fields(data)
 
-	switch cmd {
-	case "extheader":
+	switch from {
+	case "header":
 		if len(fields) < 3 {
-			return nil, fmt.Errorf("could not newExtractor: expected `extheader varname header regex`")
+			return nil, fmt.Errorf("could not newExtractor: expected `header variable header_name regex`")
 		}
 
 		exprStr := strings.Join(fields[:2], " ")
@@ -48,11 +48,11 @@ func newExtractor(cmd, data string) (*extractor, error) {
 			return nil, fmt.Errorf("could not newExtractor: %v", err)
 		}
 
-		return &extractor{from: cmd, into: fields[0], name: fields[1], expr: expr}, nil
+		return &extractor{from: from, into: fields[0], name: fields[1], expr: expr}, nil
 
-	case "extcookie":
+	case "cookie":
 		if len(fields) < 3 {
-			return nil, fmt.Errorf("could not newExtractor: expected `extcookie varname header regex`")
+			return nil, fmt.Errorf("could not newExtractor: expected `cookie variable cookie_name regex`")
 		}
 
 		exprStr := strings.Join(fields[:2], " ")
@@ -61,11 +61,11 @@ func newExtractor(cmd, data string) (*extractor, error) {
 			return nil, fmt.Errorf("could not newExtractor: %v", err)
 		}
 
-		return &extractor{from: cmd, into: fields[0], name: fields[1], expr: expr}, nil
+		return &extractor{from: from, into: fields[0], name: fields[1], expr: expr}, nil
 
-	case "extbody":
+	case "body":
 		if len(fields) < 2 {
-			return nil, fmt.Errorf("could not newExtractor: expected `extbody varname regex`")
+			return nil, fmt.Errorf("could not newExtractor: expected `body variable regex`")
 		}
 
 		exprStr := strings.Join(fields[:1], " ")
@@ -74,7 +74,7 @@ func newExtractor(cmd, data string) (*extractor, error) {
 			return nil, fmt.Errorf("could not newExtractor: %v", err)
 		}
 
-		return &extractor{from: cmd, into: fields[0], expr: expr}, nil
+		return &extractor{from: from, into: fields[0], expr: expr}, nil
 
 	default:
 		return nil, fmt.Errorf("could not newExtractor: %s is not a valid value", cmd)

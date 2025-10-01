@@ -24,35 +24,33 @@ type modifier struct {
 // newModifier attempts to build a valid modifier based on the given cmd and
 // data parameters. An error is returned if a valid modifier cannot be
 // created.
-func newModifier(cmd, data string) (*modifier, error) {
+func newModifier(what, data string) (*modifier, error) {
 	fields = strings.Fields(data)
 
-	switch cmd {
-	case "reqcookie":
+	switch what {
+	case "cookie":
 		if len(fields) != 2 {
 			return nil, fmt.Errorf("could not newModifier: expected `cookie name value`")
 		}
 
-		return &modifier{what: cmd, name: fields[0], value: fields[1]}, nil
-	case "reqheader":
+		return &modifier{what: what, name: fields[0], value: fields[1]}, nil
+	case "header":
 		if len(fields) != 2 {
 			return nil, fmt.Errorf("could not newModifier: expected `header name value`")
 		}
 
-		return &modifier{what: cmd, name: fields[0], value: fields[1]}, nil
-
-	case "postbody":
+		return &modifier{what: what, name: fields[0], value: fields[1]}, nil
+	case "body":
 		if data == "" {
-			return nil, fmt.Errorf("could not newModifier: expected `postbody data`")
+			return nil, fmt.Errorf("could not newModifier: expected `body data`")
 		}
-		return &modifier{what: cmd, value: data}, nil
-
-	case "posttype":
+		return &modifier{what: what, value: data}, nil
+	case "type":
 		if len(fields) != 1 {
-			return nil, fmt.Errorf("could not newModifier: expected `posttype content-type")
+			return nil, fmt.Errorf("could not newModifier: expected `type content-type")
 		}
 
-		return &modifier{what: cmd, value: fields[0]}, nil
+		return &modifier{what: what, value: fields[0]}, nil
 	default:
 		return nil, fmt.Errorf("could not newModifier: %s is not a valid modifier", what)
 	}
@@ -65,9 +63,9 @@ func (m *modifier) modify(req *http.Request) {
 		req.Header.Set(m.name, m.value)
 	case "cookie":
 		req.AddCookie(&http.Cookie{Name: m.name, Value: m.value})
-	case "postbody":
+	case "body":
 		req.Body = strings.NewReader(m.value)
-	case "posttype":
+	case "type":
 		req.Header.Set("Content-Type", m.value)
 	default:
 	}

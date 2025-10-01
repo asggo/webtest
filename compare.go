@@ -18,7 +18,7 @@ type comparison struct {
 // newComparison attempts to build a valid comparison based on the given cmd
 // and data parameters. An error is returned if a valid comparison cannot be
 // created.
-func newComparison(cmd, data string) (*comparison, error) {
+func newComparison(what, data string) (*comparison, error) {
 	var c comparison
 
 	fields = strings.Fields(data)
@@ -30,14 +30,14 @@ func newComparison(cmd, data string) (*comparison, error) {
 		}
 
 		val := strings.Join(fields[:2], " ")
-		c = comparison{what: cmd, name: fields[0], operator: fields[1], value: val}
+		c = comparison{what: what, name: fields[0], operator: fields[1], value: val}
 	case "cookie":
 		if len(fields) < 3 {
 			return nil, fmt.Errorf("could not newComparison: expected `cookie name operator value`")
 		}
 
 		val := strings.Join(fields[:2], " ")
-		c = comparison{what: cmd, name: fields[0], operator: fields[1], value: val}
+		c = comparison{what: what, name: fields[0], operator: fields[1], value: val}
 
 	case "body":
 		if len(fields) < 2 {
@@ -45,21 +45,21 @@ func newComparison(cmd, data string) (*comparison, error) {
 		}
 
 		val := strings.Join(fields[:1], " ")
-		c = comparison{what: cmd, operator: fields[0], value: val}
+		c = comparison{what: what, operator: fields[0], value: val}
 
 	case "redirect":
 		if len(fields) != 2 {
 			return nil, fmt.Errorf("could not newComparison: expected `redirect operator path")
 		}
 
-		c = comparison{what: cmd, operator: fields[0], value: fields[1]}
+		c = comparison{what: what, operator: fields[0], value: fields[1]}
 
 	case "status":
 		if len(fields) != 2 {
 			return nil, fmt.Errorf("could not newComparison: expected `status operator value")
 		}
 
-		c = comparison{what: cmd, operator: fields[0], value: fields[1]}
+		c = comparison{what: what, operator: fields[0], value: fields[1]}
 
 	default:
 		return nil, fmt.Errorf("could not newComparison: %s is not a valid comparison", cmd)
