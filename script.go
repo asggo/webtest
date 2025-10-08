@@ -19,12 +19,9 @@ import (
 type script struct {
 	filename string
 	tests []*test
-	variables [string]string
 }
 
-func (s *script) addVariable(e extracted) {
-	s.variables[e.name] = e.value
-}
+
 
 // load parses and loads test cases from the given Reader.
 func (s *script) load(data *io.Reader) error {
@@ -73,7 +70,7 @@ func (s *script) load(data *io.Reader) error {
 
 		switch cmd {
 		case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE":
-			test = newTest(cmd, loc)
+			test = &testCase{method: cmd, url: loc}
 		case "modify":
 			if loc == "body" {
 				for {
@@ -111,19 +108,6 @@ func (s *script) load(data *io.Reader) error {
 	}
 }
 
-func (s *script) run(t *testing.T, u *url.URL, c *http.Client, h *http.Handler) {
-	for _, test := range s.tests {
-		exts, err := test.runHandler(u, c, h)
-		if err != nil {
-			t.Fatal("could not TestHandler: %v", err)
-		}
-
-		for _, e := range exts {
-			s.addVariable(e)
-		}
-	}
-}
-
 func pop(fields []string) string {
 	switch len(fields) {
 	case 0:
@@ -135,11 +119,20 @@ func pop(fields []string) string {
 	}
 }
 
-func newScript(filename string) script {
+func newScript(filename string) (script, error) {
 	var s script
 
-	s.filename = filename
-	s.variables = make([string]string)
+	data, err := os.Open(file)
+	if err != nil {
+		return s, fmt.Errorf("could not newScript: %v", err)
+	}
 
-	return s
+	err := s.load(data)
+	if err != nil {
+		return s, fmt.Errorf("could not newScript: %v", err)
+	}
+
+	s.filename = filename
+
+	return s, nil
 }

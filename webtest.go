@@ -1,42 +1,20 @@
 package webtest
 
 import (
-	"net/http"
-	"net/http/cookiejar"
-	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"testing"
 )
 
-// newHttpTester creates a server and client for testing the given handler.
-func newHttpTester(t *testing.T, h http.Handler) (*httptest.Server, *http.Client, *url.URL) {
-	server := httptest.NewTLSServer(h)
-
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal("could not newHttpTester:", err)
-	}
-
-	client := server.Client()
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		return http.ErrUseLastResponse
-	}
-	client.Jar = jar
-
-	url, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatal("could not newHttpTester:", err)
-	}
-
-	return server, client, url
-}
 
 // TestHandler runs the test script files matched by glob against the given
 // handler.
 func TestHandler(t *testing.T, glob string, h http.Handler) {
-	server, client, url := newHttpTester(t, h)
-	defer server.Close()
+	tester, err := newTester(h)
+	if err != nil {
+		t.Fatalf("could not TestHandler: %v", err)
+	}
+
+	defer tester.server.Close()
 
 	files, err := filepath.Glob(glob)
 	if err != nil {
@@ -59,5 +37,9 @@ func TestHandler(t *testing.T, glob string, h http.Handler) {
 			t.Fatalf("could not TestHandler: %v", err)
 		}
 
-		script.run(t, url, client, h)
+		err = tester.run(script)
+		if err != nil {
+			t.Fatalf("could not TestHandler: %v", err)
+		}
+	}
 }

@@ -21,10 +21,43 @@ type modifier struct {
 	value string
 }
 
+func (m modifier) String() string {
+	if m.name == "" {
+		return fmt.Sprintf("Modify %s %s", m.what, m.value)
+	} else {
+		return fmt.Sprintf("Modify %s %s %s", m.what, m.name, m.value)
+	}
+}
+
+// modify updates an http.Request based on the criteria of the modifier.
+func (m *modifier) modify(req *http.Request, t *tester) {
+	switch {
+	case strings.HasPrefix(m.value, "$"):
+		name = strings.TrimPrefix(m.value, "$")
+		value = t.variables[name]
+	case strings.HasPrefix(m.value, "\\$"):
+		value = strings.TrimPrefix(m.value, "\\")
+	default:
+		value = m.value
+	}
+
+	switch m.what {
+	case "header":
+		req.Header.Set(m.name, value)
+	case "cookie":
+		req.AddCookie(&http.Cookie{Name: m.name, Value: value})
+	case "body":
+		req.Body = strings.NewReader(value)
+	case "type":
+		req.Header.Set("Content-Type", value)
+	default:
+	}
+}
+
 // newModifier attempts to build a valid modifier based on the given cmd and
 // data parameters. An error is returned if a valid modifier cannot be
 // created.
-func newModifier(what, data string) (*modifier, error) {
+func newModifier(what, data string) (modifier, error) {
 	fields = strings.Fields(data)
 
 	switch what {
@@ -33,40 +66,25 @@ func newModifier(what, data string) (*modifier, error) {
 			return nil, fmt.Errorf("could not newModifier: expected `cookie name value`")
 		}
 
-		return &modifier{what: what, name: fields[0], value: fields[1]}, nil
+		return modifier{what: what, name: fields[0], value: fields[1]}, nil
 	case "header":
 		if len(fields) != 2 {
 			return nil, fmt.Errorf("could not newModifier: expected `header name value`")
 		}
 
-		return &modifier{what: what, name: fields[0], value: fields[1]}, nil
+		return modifier{what: what, name: fields[0], value: fields[1]}, nil
 	case "body":
 		if data == "" {
 			return nil, fmt.Errorf("could not newModifier: expected `body data`")
 		}
-		return &modifier{what: what, value: data}, nil
+		return modifier{what: what, value: data}, nil
 	case "type":
 		if len(fields) != 1 {
 			return nil, fmt.Errorf("could not newModifier: expected `type content-type")
 		}
 
-		return &modifier{what: what, value: fields[0]}, nil
+		return modifier{what: what, value: fields[0]}, nil
 	default:
 		return nil, fmt.Errorf("could not newModifier: %s is not a valid modifier", what)
-	}
-}
-
-// modify updates an http.Request based on the criteria of the modifier.
-func (m *modifier) modify(req *http.Request) {
-	switch m.what {
-	case "header":
-		req.Header.Set(m.name, m.value)
-	case "cookie":
-		req.AddCookie(&http.Cookie{Name: m.name, Value: m.value})
-	case "body":
-		req.Body = strings.NewReader(m.value)
-	case "type":
-		req.Header.Set("Content-Type", m.value)
-	default:
 	}
 }

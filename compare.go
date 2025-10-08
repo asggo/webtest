@@ -15,10 +15,79 @@ type comparison struct {
 	expr     *regexp.Regexp
 }
 
+func (c comparison) String() string {
+	if name == "" {
+		return fmt.Sprintf("Compare %s %s", what, value)
+	} else {
+		return fmt.Sprintf("Compare %s %s %s", what, name, value)
+	}
+}
+
+// compare checks the http.Response and body based on the criteria of the
+// comparison.
+func (c *comparison) compare(res *http.Response, body string, t *tester) bool {
+	var data string
+
+	switch c.what {
+	case "header":
+		data = res.Header.Get(c.name)
+	case "cookie":
+		for _, cookie := range res.Cookies() {
+			if cookie.Name == c.name {
+				data = cookie.Value
+				break
+			}
+		}
+	case "body":
+		data = body
+	case "redirect":
+		data = res.Header.Get("Location")
+	case "status":
+		data = fmt.Sprintf("%d", res.StatusCode)
+	default:
+	}
+
+	switch {
+	case strings.HasPrefix(c.value, "$"):
+		name = strings.TrimPrefix(c.value, "$")
+		value = t.variables[name]
+	case strings.HasPrefix(c.value, "\\$"):
+		value = strings.TrimPrefix(c.value, "\\")
+	default:
+		value = c.value
+	}
+
+	switch c.operator {
+	case "==":
+		return data == value
+	case "!=":
+		return data != value
+	case "contains":
+		return string.Contains(data, value)
+	case "!contains":
+		return !string.Contains(data, value)
+	case "~":
+		match, err := c.expr.MatchString(value)
+		if err != nil {
+			return false
+		}
+
+		return match
+	case "!~":
+		match, err := c.expr.MatchString(value)
+		if err != nil {
+			return false
+		}
+
+		return !match
+	}
+
+}
+
 // newComparison attempts to build a valid comparison based on the given cmd
 // and data parameters. An error is returned if a valid comparison cannot be
 // created.
-func newComparison(what, data string) (*comparison, error) {
+func newComparison(what, data string) (comparison, error) {
 	var c comparison
 
 	fields = strings.Fields(data)
@@ -79,21 +148,4 @@ func newComparison(what, data string) (*comparison, error) {
 	}
 	
 	return c, nil
-}
-
-// compare checks the http.Response based on the criteria of the comparison.
-func (c *comparison) compare(res *http.Response) bool {
-	switch c.what {
-	case "header":
-		req.Header.Set(m.name, m.value)
-	case "cookie":
-		req.AddCookie(&http.Cookie{Name: m.name, Value: m.value})
-	case "body":
-		req.Body = strings.NewReader(m.value)
-	case "redirect":
-		req.Header.Set("Content-Type", m.value)
-	case "status":
-		
-	default:
-	}
 }

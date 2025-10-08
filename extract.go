@@ -10,12 +10,6 @@ import (
 	"strings"
 )
 
-// extracted represents a piece of data extracted by an extractor.
-type extracted struct {
-	name string
-	value string
-}
-
 // An extractor represents a single piece of data to extract from a response.
 // The from field is used to identify where in the response the extracted
 // data can be found. The valid options for the from field are: extheader,
@@ -33,7 +27,7 @@ type extractor struct {
 // newExtractor attempts to build a valid extractor based on the given data
 // and value parameters. An error is returned if a valid extractor cannot be
 // created.
-func newExtractor(from, data string) (*extractor, error) {
+func newExtractor(from, data string) (extractor, error) {
 	fields = strings.Fields(data)
 
 	switch from {
@@ -48,7 +42,7 @@ func newExtractor(from, data string) (*extractor, error) {
 			return nil, fmt.Errorf("could not newExtractor: %v", err)
 		}
 
-		return &extractor{from: from, into: fields[0], name: fields[1], expr: expr}, nil
+		return extractor{from: from, into: fields[0], name: fields[1], expr: expr}, nil
 
 	case "cookie":
 		if len(fields) < 3 {
@@ -61,7 +55,7 @@ func newExtractor(from, data string) (*extractor, error) {
 			return nil, fmt.Errorf("could not newExtractor: %v", err)
 		}
 
-		return &extractor{from: from, into: fields[0], name: fields[1], expr: expr}, nil
+		return extractor{from: from, into: fields[0], name: fields[1], expr: expr}, nil
 
 	case "body":
 		if len(fields) < 2 {
@@ -74,7 +68,7 @@ func newExtractor(from, data string) (*extractor, error) {
 			return nil, fmt.Errorf("could not newExtractor: %v", err)
 		}
 
-		return &extractor{from: from, into: fields[0], expr: expr}, nil
+		return extractor{from: from, into: fields[0], expr: expr}, nil
 
 	default:
 		return nil, fmt.Errorf("could not newExtractor: %s is not a valid value", cmd)
@@ -83,7 +77,7 @@ func newExtractor(from, data string) (*extractor, error) {
 
 // extract finds and returns data from an http.Response based on the criteria
 // of the extractor. It returns the na
-func (e *extractor) extract(rsp *http.Response, body string) extracted {
+func (e *extractor) extract(rsp *http.Response, body string, t *tester) {
 	var data string
 
 	switch e.from {
@@ -100,7 +94,5 @@ func (e *extractor) extract(rsp *http.Response, body string) extracted {
 		data = body
 	}
 
-	value = e.expr.MatchString(data)
-
-	return extracted{name: e.into, value: value}
+	t.variables[e.into] = string(e.expr.Find([]byte(data)))
 }
