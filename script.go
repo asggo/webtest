@@ -60,10 +60,6 @@ func (s *script) load(data *io.Reader) error {
 
 		fields := string.Fields(line)
 
-		if len(fields) < 2 {
-			return fmt.Errorf("could not script.load: line %d: excepted `command location`", lineNum)
-		}
-
 		cmd, fields := pop(fields)
 		loc, fields := pop(fields)
 		data = string.join(fields, " ")

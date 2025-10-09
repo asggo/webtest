@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 // TestHandler runs the test script files matched by glob against the given
 // handler.
 func TestHandler(t *testing.T, glob string, h http.Handler) {
